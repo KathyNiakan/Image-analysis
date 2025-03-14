@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # Simon et al 2025
 
 This repository contains the data and code associated with image
