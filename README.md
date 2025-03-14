@@ -1,93 +1,87 @@
+---
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
 # Simon et al 2025
 
+This repository contains the data and code associated with image
+analysis in the manuscript Simon et. al., (2025) XXXX Suppression of ERK
+signalling promotes pluripotent epiblast in the human blastocyst. DOI
+XXXX
 
+# Repository structure and useage
 
-## Getting started
+## /ImageJ
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+ImageJ \*.ijm macro scripts for batch running StarDist segmentation on
+confocal microscopy images of pre-implantation human embryos for later
+quantification in Cell Profiler
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+For use with StarDist 2D plug-in (Schmidt et. al., 2018).
 
-## Add your files
+Modified pipeline from
+<https://github.com/todd-fallesen/Niakan_Lab_KLF17> (Lea et. al., 2021)
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## /Cell_Profiler
 
-```
-cd existing_repo
-git remote add origin https://gitlab.developers.cam.ac.uk/ctr/ctr-bioinformatics/niakan-lab/simon-et-al-2025.git
-git branch -M main
-git push -uf origin main
-```
+Pipelines for the segmentation and measurement of cytoplasmic and
+nuclear fluorescence intensities of ImageJ processed confocal microscopy
+images of pre-implantation human embryos.
 
-## Integrate with your tools
+-   [[FGF_ERKi_NANOG_GATA4_GATA3_nuclear_intensity.cppipe]{.underline}](https://gitlab.developers.cam.ac.uk/ctr/ctr-bioinformatics/niakan-lab/simon-et-al-2025/-/blob/main/Cell_Profiler/FGF_ERKi_NANOG_GATA4_GATA3_nuclear_intensity.cppipe?ref_type=heads "FGF_ERKi_NANOG_GATA4_GATA3_nuclear_intensity.cppipe") -
+    pipeline used for nuclear intensity quantification for FGF and ERKi
+    experiments
 
-- [ ] [Set up project integrations](https://gitlab.developers.cam.ac.uk/ctr/ctr-bioinformatics/niakan-lab/simon-et-al-2025/-/settings/integrations)
+-   [[pERK_SOX2_OTX2_cyto_nuclear_intensity.cppipe]{.underline}](https://gitlab.developers.cam.ac.uk/ctr/ctr-bioinformatics/niakan-lab/simon-et-al-2025/-/blob/main/Cell_Profiler/pERK_SOX2_OTX2_cyto_nuclear_intensity.cppipe?ref_type=heads "pERK_SOX2_OTX2_cyto_nuclear_intensity.cppipe") -
+    pipeline used for cytoplasmic and nuclear intensities for pERK
+    experiments
 
-## Collaborate with your team
+These scripts were compiled in CellProfiler v4.1.3 (McQuin et. al.,
+2018).
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Modified pipeline from
+<https://github.com/todd-fallesen/Niakan_Lab_KLF17> (Lea et. al., 2021)
 
-## Test and Deploy
+## /data
 
-Use the built-in continuous integration in GitLab.
+Pre-processed and processed data for image analysis in R
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+/embryo_example - pre-processed data to be used with ../R/processing.R -
+examples of Cell Profiler data outputs, and manual annotations for ICM
+cells and corrections for under segmentation.
 
-***
+-   \*.csv - all processed data containing experiment metadata, raw and
+    Z-corrected fluorescence intensitities for each of the FGF, ERKi and
+    pERK experiments.
 
-# Editing this README
+For raw imaging data, please see Figshare repository DOI dx.doi.org/XXXX
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## /R
 
-## Suggestions for a good README
+R scripts for data processing, analysis and figure generation
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+-   [[processing.R]{.underline}](https://gitlab.developers.cam.ac.uk/ctr/ctr-bioinformatics/niakan-lab/simon-et-al-2025/-/blob/main/R/processing.R?ref_type=heads "processing.R") -
+    processing image quantification from Cell Profiler data output,
+    combining with manual annotations and corrections, and performing
+    Z-correction on fluorescence intensities
 
-## Name
-Choose a self-explaining name for your project.
+    -   [[ebcor.R]{.underline}](https://gitlab.developers.cam.ac.uk/ctr/ctr-bioinformatics/niakan-lab/simon-et-al-2025/-/blob/main/R/ebcor.R?ref_type=heads "ebcor.R") -
+        function for Empirical Bayes correction of Z-axis associated
+        fluorescence decay. Modified from
+        <https://github.com/nestorsaiz/saiz-et-al_2016> (Saiz et. al.,
+        2016)
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+-   \*\_analysis.R - analysis and figures of FGF or ERK treatments, or
+    pERK experiments
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+    -   \*\_data.R - load processed experimental data
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+    -   \*\_hclust.R - hierarchical clustering of nuclear fluorescence
+        intensities to assign ICM lineage identities. Modified from
+        <https://github.com/nestorsaiz/saiz-et-al_2020> (Saiz et. al.
+        2020)
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+These scripts were compiled in R Studio version 2023.12.1+402, and R
+version 4.3.3
