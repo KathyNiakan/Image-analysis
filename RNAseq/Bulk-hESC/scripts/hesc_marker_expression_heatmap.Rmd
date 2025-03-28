@@ -1,0 +1,165 @@
+---
+title: "Marker expression"
+output: html_document
+date: "2025-01-29"
+---
+
+Plot expression of naive, primed, and core pluripotency markers in hESC samples. Looking to highlight the differences in expression between naive and primed samples.
+
+```{r}
+library(pheatmap)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(viridis)
+library(tidyr)
+library(tibble)
+
+```
+
+```{r load}
+# Load data
+# sf_nbe = normalised, NOT batch corrected
+load("../results/raw_norm_DESeq_sfn.RData")
+
+# Subset to only hESC (bulk) datasets 
+stype_select <- stype_select[stype_select$rna_seq == "bulk",]
+sf <- sf[,colnames(sf) %in% stype_select$sample_name]
+```
+
+```{r}
+# Select genes to plot
+
+genes <- c("POU5F1", "NANOG", "SOX2", 
+           "SALL2", "ETV5", "ZIC2",
+           "DNMT3L", "SUSD2", "DPPA3", "KLF4", "KLF17"
+           )
+group <- c(rep("core", 3), rep("primed", 3),  rep("naive", 5))
+
+data <- sf[genes,]
+```
+
+```{r}
+# Create annotation info for heatmap
+
+stype_select <- stype_select %>% 
+  mutate(sample_group = case_when(state == "naive" & batch == "Simon" & medium == "DMSO" ~ "Control in PXGL",
+                           state == "naive" & batch == "Simon" & medium == "ULIX" ~ "ERKi in PXGL",
+                           state == "naive" & batch == "Simon" & medium == "UXGL_DMSO" ~ "Control in UXGL",
+                           state == "naive" & batch == "Simon" & medium == "UXGL_ULIX" ~ "ERKi in UXGL",
+                           state == "naive" & batch != "Simon" ~ "Naive hESC",
+                           state == "primed" & batch != "Simon" ~ "Primed hESC"))
+
+
+# Make longer format for ggplot
+data <- data %>% 
+  data.frame %>% 
+  rownames_to_column(var = "gene") %>%
+  pivot_longer(cols = !contains("gene"), values_to = "expression")
+
+# Add info about sample group 
+data <- data %>%
+  left_join(stype_select, by = join_by("name" == "sample_name"))
+
+data <- data %>% group_by(gene, sample_group) %>% summarise(median = median(expression))
+
+data <- data %>%
+  pivot_wider(names_from = sample_group, values_from = median) %>%
+  column_to_rownames(var = "gene") %>%
+  as.matrix()
+
+colanno <- data.frame(row.names = colnames(data), sample_group = colnames(data)) 
+
+rowanno <- data.frame(row.names = genes, group = group)
+```
+
+```{r}
+
+data <- data[match(genes, rownames(data)), , drop=FALSE]
+
+
+pal <- list(
+  sample_group = c(
+    "Primed hESC" = "#00B865", 
+    "Naive hESC" = "#70A7FF",
+    "Control in PXGL" = "#9C9996",
+    "ERKi in PXGL" = "#EF850B",
+    "Control in UXGL" = "#000000",
+    "ERKi in UXGL" = "#FB4570")
+)
+
+
+pheatmap(data, 
+         annotation_col = colanno, 
+ #        annotation_row = rowanno,
+         annotation_colors = pal,
+        color  = viridis(10),
+       cluster_rows = FALSE,
+#        scale = "row", 
+      cellwidth=10, 
+  cellheight=10,
+     fontsize = 8,
+    treeheight_col = 5,  
+  height = 3,
+    width = 3.5,
+    filename = "../results/heatmap_median_expression.png"
+
+)
+         
+```
+
+```{r}
+
+t_data <- t(data)
+
+
+pal <- list(
+  sample_group = c(
+    "Primed hESC" = "#00B865", 
+    "Naive hESC" = "#70A7FF",
+    "Control in PXGL" = "#9C9996",
+    "ERKi in PXGL" = "#EF850B",
+    "Control in UXGL" = "#000000",
+    "ERKi in UXGL" = "#FB4570")
+)
+
+
+pheatmap(t_data, 
+    #     annotation_col = colanno, 
+         annotation_row = colanno,
+         annotation_colors = pal,
+        color  = viridis(10),
+       cluster_cols = FALSE,
+#        scale = "row", 
+      cellwidth=10, 
+  cellheight=10,
+     fontsize = 8,
+    treeheight_row = 6,  
+  height = 3,
+    width = 3.5,
+         annotation_legend = FALSE,  
+annotation_names_row = FALSE,
+   filename = "../results/heatmap_median_expression_t.png"
+)
+
+
+
+pheatmap(t_data, 
+    #     annotation_col = colanno, 
+         annotation_row = colanno,
+         annotation_colors = pal,
+        color  = viridis(10),
+       cluster_cols = FALSE,
+#        scale = "row", 
+      cellwidth=10, 
+  cellheight=10,
+     fontsize = 8,
+    treeheight_row = 6,  
+  height = 3,
+    width = 3.5,
+         annotation_legend = FALSE,  
+annotation_names_row = FALSE,
+   filename = "../results/heatmap_median_expression_t.pdf"
+)
+
+```
