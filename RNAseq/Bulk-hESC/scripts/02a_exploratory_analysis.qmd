@@ -1,0 +1,707 @@
+---
+title: "exploratory analysis"
+editor: visual
+---
+
+# Explore the select and single-cell RNA-seq data
+
+## Load packages
+
+```{r 1}
+
+#!output: false
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(Rtsne))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(readr))
+suppressPackageStartupMessages(library(DrImpute))
+source("../scripts/utility_functions.R")
+```
+
+## Data preparation
+
+```{r 2}
+#!eval: false
+
+# Load the hESC and additional study count data
+load("../results/hesc_new.RData")
+names(hesc_new)
+
+# Extract count data
+hesc_new_counts <- hesc_new$counts
+
+# Load sample metadata
+stype <- read_csv("../metadata/new_sample_features.csv")
+stype <- stype[!duplicated(stype$sample_name),]
+
+# Limit metadata to samples present in hesc counts
+stype_hesc_new <- stype[stype$sample_name %in% colnames(hesc_new_counts),]
+```
+
+```{r 3}
+#!eval: false
+hesc_new_counts <- hesc_new_counts[,stype_hesc_new$sample_name]
+all(colnames(hesc_new_counts) == stype_hesc_new$sample_name)
+```
+
+### 
+
+```{r 4}
+#!eval: false
+table(stype_hesc_new$batch)
+```
+
+```{r}
+# Combine technical replicates by summing columns with the same prefix
+summed_matrix <- hesc_new_counts %>%
+  as.data.frame() %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "Sample", values_to = "Count") %>%
+  mutate(Condition = sub("-rep[0-9]+$", "", Sample)) %>%
+  group_by(Gene, Condition) %>%
+  summarise(Summed_Count = sum(Count), .groups = "drop") %>%
+  pivot_wider(names_from = Condition, values_from = Summed_Count)
+
+# Convert back to a data frame with row names
+summed_matrix <- summed_matrix %>%
+  column_to_rownames("Gene")
+
+hesc_sum_counts <- as.matrix(summed_matrix)
+
+# Fix metadata to reflect summed
+stype_hesc_new <- stype_hesc_new %>%
+  mutate(sample_name = sub("-rep[0-9]+$", "", sample_name)) %>%
+  distinct(sample_name, .keep_all = TRUE)
+```
+
+## Data preparation old hESC
+
+```{r 2}
+#!eval: false
+
+# Load the hESC and additional study count data
+load("../results/hesc.RData")
+names(hesc)
+
+# Extract count data
+hesc_counts <- hesc$counts
+
+# Load sample metadata
+stype <- read_tsv("../metadata/sample_features.tsv")
+stype <- stype[!duplicated(stype$sample_name),]
+# Fix weird characters in cell_line
+stype <- stype %>% mutate(cell_line = if_else(cell_line == "na\x95ve_hESC", "naive_hESC", cell_line))
+
+
+# Limit metadata to samples present in hesc counts
+stype_hesc <- stype[stype$sample_name %in% colnames(hesc_counts),]
+```
+
+```{r 3}
+#!eval: false
+hesc_counts <- hesc_counts[,stype_hesc$sample_name]
+all(colnames(hesc_counts) == stype_hesc$sample_name)
+```
+
+### 
+
+```{r 4}
+#!eval: false
+table(stype_hesc$batch)
+```
+
+### 
+
+### Now add data from the Wamaitha paper
+
+```{r 5}
+#!eval: false
+wamaitha <- readRDS("../results/wamaitha.RDS") # Already in summarized experiment format
+
+counts_wam <- assays(wamaitha)$counts
+stype_wam <- stype[stype$sample_name %in% colnames(counts_wam),]
+
+table(stype_wam$batch)
+```
+
+### Merge new and Wam datasets and restrict to select RNA-seq
+
+```{r 6}
+#!eval: false
+counts_allhESC <- merge(hesc_sum_counts, hesc_counts, by = "row.names")
+rownames(counts_allhESC) <- counts_allhESC$Row.names
+counts_allhESC <- counts_allhESC[,-1]
+counts <- merge(counts_wam, counts_allhESC, by = "row.names")
+rownames(counts) <- counts$Row.names
+counts$Row.names <- NULL
+
+stype <- rbind(stype, stype_hesc_new)
+stype <- stype[stype$sample_name %in% colnames(counts),]
+
+
+select <- c("Bredenkamp", "ji", "Lea", "guo", "takashima", "wamaitha", "Simon")
+
+stype_select <- stype[stype$batch %in% select,]
+counts_select <- counts[,stype_select$sample_name,]
+
+# Fix stype_select medium column entries to group similar types
+stype_select$medium <- sub("_[0-9]", "", stype_select$medium)
+stype_select$medium <- sub("_R[0-9]", "", stype_select$medium)
+stype_select$medium <- sub("ULIX3", "ULIX", stype_select$medium)
+stype_select$medium <- sub(".*UI.*", "UI", stype_select$medium)
+stype_select$medium <- sub(".*Dox.*", "Dox", stype_select$medium)
+
+
+all(colnames(counts_select) == stype_select$sample_name)
+table(stype_select$batch)
+```
+
+```{r}
+#!eval: false
+
+
+stype_select <- stype_select %>% 
+  mutate(sample_type = factor(paste0(cell_line, " ", ifelse(medium == "none", 
+                                                            "", medium), " (", 
+                                     stringr::str_to_title(batch), " et al.)"),
+                              levels = c("naive_hESC DMSO (Simon et al.)", # naive
+                                         "naive_hESC ULIX (Simon et al.)", # naive
+                                         "naive_hESC UXGL_DMSO (Simon et al.)", # naive
+                                         "naive_hESC UXGL_ULIX (Simon et al.)", # naive
+                                         
+                                         "CH1 AI (Wamaitha et al.)", # primed
+                                         "CH2 AI (Wamaitha et al.)", # primed
+                                         "CH3 AI (Wamaitha et al.)", # primed
+                                         "H1 AI (Wamaitha et al.)", # primed
+                                         "H9 AI (Wamaitha et al.)", # primed
+                                         
+                                         "H9 mTeSR1 (Wamaitha et al.)", # primed
+                                         
+                                         "H9 mTeSR1_matrigel (Wamaitha et al.)", # primed
+                                         
+                                         "H1 mTeSR1_laminin (Wamaitha et al.)", # primed
+                                         "H9 mTeSR1_laminin (Wamaitha et al.)", # primed
+                                         
+                                         "WIBR3 KSR/FBS+FGF (Ji et al.)", # primed
+                                         "H9 KSR/FGF (Takashima et al.)", # primed
+                                         "Shef6 KSR/FGF (Guo et al.)", # primed
+                                         
+                                         "WIBR3 5iLA (Ji et al.)", # naive
+                                         
+                                         "H9 t2iL+Go (Guo et al.)", # naive
+                                         "H9 t2iL+Go (Takashima et al.)", # naive
+                                         "HNES1 t2iL+Go (Guo et al.)", # naive
+                                         "Shef6_p18 t2iL+Go (Guo et al.)", # naive
+                                         "Shef6_p26 t2iL+Go (Guo et al.)", # naive
+                                         
+                                         "H9 t2iL+Go+Y (Guo et al.)", # naive
+                                         "HNES1 t2iL+Go FF (Guo et al.)", # naive
+                                         "Shef6 t2iL+Go FF (Guo et al.)", # naive
+                                         
+                                         "H9 p5 (Lea et al.)", # naive
+                                         "H9 Day0 (Lea et al.)", # naive
+                                         
+                              "niPS niPS_C2_Gel (Bredenkamp et al.)", # naive
+                              "niPS niPS_C4_Gel (Bredenkamp et al.)", # naive
+                              "HNES1 HNES1_Gel (Bredenkamp et al.)", # naive
+                              "niPS niPS_C2_Lam (Bredenkamp et al.)", # naive
+                              "niPS niPS_C4_Lam (Bredenkamp et al.)", # naive
+                              "HNES1 HNES1_Lam (Bredenkamp et al.)" # naive
+                              ),
+                              ordered = TRUE))
+
+# Remove unwanted samples (sample_type will = NA if not listed as factor above)
+stype_select <- stype_select[!is.na(stype_select$sample_type),]
+
+# Add column designating naive/primed state
+stype_select <- stype_select %>% 
+  mutate(state = factor(paste0(cell_line, " ", ifelse(medium == "none", 
+                                                            "", medium), " (", 
+                                     stringr::str_to_title(batch), " et al.)"),
+                              levels = c("naive_hESC DMSO (Simon et al.)", # orange
+                                         "naive_hESC ULIX (Simon et al.)", # grey
+                                         "naive_hESC UXGL_DMSO (Simon et al.)", # pink
+                                         "naive_hESC UXGL_ULIX (Simon et al.)", # black
+                                         
+                                         "CH1 AI (Wamaitha et al.)", # primed
+                                         "CH2 AI (Wamaitha et al.)", # primed
+                                         "CH3 AI (Wamaitha et al.)", # primed
+                                         "H1 AI (Wamaitha et al.)", # primed
+                                         "H9 AI (Wamaitha et al.)", # primed
+                                         
+                                         "H9 mTeSR1 (Wamaitha et al.)", # primed
+                                         
+                                         "H9 mTeSR1_matrigel (Wamaitha et al.)", # primed
+                                         
+                                         "H1 mTeSR1_laminin (Wamaitha et al.)", # primed
+                                         "H9 mTeSR1_laminin (Wamaitha et al.)", # primed
+                                         
+                                         "WIBR3 KSR/FBS+FGF (Ji et al.)", # primed
+                                         "H9 KSR/FGF (Takashima et al.)", # primed
+                                         "Shef6 KSR/FGF (Guo et al.)", # primed
+                                         
+                                         "WIBR3 5iLA (Ji et al.)", # primed
+                                         
+                                         "H9 t2iL+Go (Guo et al.)", # naive
+                                         "H9 t2iL+Go (Takashima et al.)", # naive
+                                         "HNES1 t2iL+Go (Guo et al.)", # naive
+                                         "Shef6_p18 t2iL+Go (Guo et al.)", # naive
+                                         "Shef6_p26 t2iL+Go (Guo et al.)", # naive
+                                         
+                                         "H9 t2iL+Go+Y (Guo et al.)", # naive
+                                         "HNES1 t2iL+Go FF (Guo et al.)", # naive
+                                         "Shef6 t2iL+Go FF (Guo et al.)", # naive
+                                         
+                                         "H9 p5 (Lea et al.)", # naive
+                                         "H9 Day0 (Lea et al.)", # naive
+                                         
+                              "niPS niPS_C2_Gel (Bredenkamp et al.)", # naive
+                              "niPS niPS_C4_Gel (Bredenkamp et al.)", # naive
+                              "HNES1 HNES1_Gel (Bredenkamp et al.)", # naive
+                              "niPS niPS_C2_Lam (Bredenkamp et al.)", # naive
+                              "niPS niPS_C4_Lam (Bredenkamp et al.)", # naive
+                              "HNES1 HNES1_Lam (Bredenkamp et al.)" # naive
+                              ), labels = c(rep("naive", 4), rep("primed", 12), rep("naive", 17))))
+
+
+
+# Add column grouping similar sample types together for easier plotting later
+stype_select <- stype_select %>% 
+  mutate(type = factor(paste0(cell_line, " ", ifelse(medium == "none", 
+                                                            "", medium), " (", 
+                                     stringr::str_to_title(batch), " et al.)"),
+                              levels = c("naive_hESC DMSO (Simon et al.)", # orange
+                                         "naive_hESC ULIX (Simon et al.)", # grey
+                                         "naive_hESC UXGL_DMSO (Simon et al.)", # pink
+                                         "naive_hESC UXGL_ULIX (Simon et al.)", # black
+                                         
+                                         "CH1 AI (Wamaitha et al.)", # primed
+                                         "CH2 AI (Wamaitha et al.)", # primed
+                                         "CH3 AI (Wamaitha et al.)", # primed
+                                         "H1 AI (Wamaitha et al.)", # primed
+                                         "H9 AI (Wamaitha et al.)", # primed
+                                         
+                                         "H9 mTeSR1 (Wamaitha et al.)", # primed
+                                         
+                                         "H9 mTeSR1_matrigel (Wamaitha et al.)", # primed
+                                         
+                                         "H1 mTeSR1_laminin (Wamaitha et al.)", # primed
+                                         "H9 mTeSR1_laminin (Wamaitha et al.)", # primed
+                                         
+                                         "WIBR3 KSR/FBS+FGF (Ji et al.)", # primed
+                                         "H9 KSR/FGF (Takashima et al.)", # primed
+                                         "Shef6 KSR/FGF (Guo et al.)", # primed
+                                         
+                                         "WIBR3 5iLA (Ji et al.)", # primed
+                                         
+                                         "H9 t2iL+Go (Guo et al.)", # naive
+                                         "H9 t2iL+Go (Takashima et al.)", # naive
+                                         "HNES1 t2iL+Go (Guo et al.)", # naive
+                                         "Shef6_p18 t2iL+Go (Guo et al.)", # naive
+                                         "Shef6_p26 t2iL+Go (Guo et al.)", # naive
+                                         
+                                         "H9 t2iL+Go+Y (Guo et al.)", # naive
+                                         "HNES1 t2iL+Go FF (Guo et al.)", # naive
+                                         "Shef6 t2iL+Go FF (Guo et al.)", # naive
+                                         
+                                         "H9 p5 (Lea et al.)", # naive
+                                         "H9 Day0 (Lea et al.)", # naive
+                                         
+                              "niPS niPS_C2_Gel (Bredenkamp et al.)", # naive
+                              "niPS niPS_C4_Gel (Bredenkamp et al.)", # naive
+                              "HNES1 HNES1_Gel (Bredenkamp et al.)", # naive
+                              "niPS niPS_C2_Lam (Bredenkamp et al.)", # naive
+                              "niPS niPS_C4_Lam (Bredenkamp et al.)", # naive
+                              "HNES1 HNES1_Lam (Bredenkamp et al.)" # naive
+                              ), labels = c(
+                                "DMSO1,2 PXGL (Simon et al.)",
+                                "ULIX1,2,3,4 PXGL (Simon et al.)",
+                                "DMSO3 UXGL (Simon et al.)",
+                                "ULIX5,6 UXGL (Simon et al.",
+                                rep("CH1,2,3 AI (Wamaitha et al.)", 3),
+                                rep("H1,H9 AI (Wamaitha et al.)", 2),
+                                rep("H1,H9 mTeSR1 (Wamaitha et al.)", 4),
+                                "WIBR3 KSR/FBS+FGF (Ji et al.)",
+                                rep("H9, Shef6 KSR/FGF (Takashima et al.; Guo et al.)", 2),
+                                "WIBR3 5iLA (Ji et al.)",
+                                rep("H9,HNES1,Shef6 t2iL+Go (Takashima et al.; Guo et al.)", 5),
+                                "H9 t2iL+Go+Y (Guo et al.)",
+                                rep("HNES1,Shef6 t2iL+Go FF (Guo et al.)", 2),
+                                "H9 p5 t2iL+Go resetting (Lea et al.)",
+                                "H9 Day0 t2iL+Go resetting (Lea et al.)",
+                                rep("C2,C4 niPS,HNES1 gelatin (Bredenkamp et al.)", 3),
+                                rep("C2,C4, niPS, HNES1 laminin (Bredenkamp et al.)", 3)
+                              )
+                         ))
+
+
+
+stype_select <- stype_select %>% 
+  mutate(rna_seq = parse_factor(rna_seq, NULL),
+         cell_line = parse_factor(cell_line, NULL),
+         medium = parse_factor(medium, NULL))
+
+
+col_pal <- c("#9C9996", # DMSO grey
+             "#EF850B", # Ulix orange
+             "#000000", # DMSO black
+             "#FB4570", # Ulix pink
+  "#00B865", #AI green 1
+     "#00B865", # sTeSR1 green 2
+  "#00B865", #mTeSR1 matrigel green 3
+             "#1FFF9A", #mTeSR1 laminin green 4
+             "#1FFF9A", #KSR green 5
+  "#0046B8",# wibsr blue 1
+             "#0046B8", # T2il Go blue 1
+  "#0046B8", # blue 1
+  "#1F75FF", # T2il Go blue 2
+  "#1F75FF", # Blue 2
+  "#1F75FF", # H9 blue 2
+  "#ADCDFF", # Gel blue 3
+  "#ADCDFF" # Lam blue 3
+)
+
+shape_pal <- c(16, # DMSO circle
+             16, # Ulix circle
+             16, # DMSO circle
+             16, # Ulix circle
+  16, # AI 1
+  15, #AI 2
+     17, #mTeSR1
+             16, # KSR 1
+  15, #KSR 2
+  16,# wibsr blue 2
+             15,  # T2il Go 1
+  17, 
+  16, # T2il Go 2
+  15, 
+  17, # H9 blue 2
+  16, # Gel blue 3
+  15 # Lam blue 4
+)
+```
+
+```{r}
+# Save extended metadata, and merged count data 
+write_csv(stype_select, "../metadata/more_samples_features.csv")
+write_tsv(counts_select, "../results/merged_counts.tsv")
+```
+
+```{r 7}
+#!eval: false
+counts_select <- counts_select[,stype_select$sample_name,]
+all(colnames(counts_select) == stype_select$sample_name)
+# Ensure counts are integers
+counts_select <- round(counts_select, digits = 0)
+
+# Create deseq object
+dds <- DESeqDataSetFromMatrix(counts_select, colData = stype_select, 
+                                design = ~ state)
+```
+
+### Gene-level filtering
+
+```{r 8}
+#!eval: false
+# Removal of mitochondrial-, ribosomal- and pseudo-genes
+mito <- grep("^MT-", rownames(dds))
+if(length(mito) > 0) {
+  dds <- dds[-mito, ]
+}
+
+ribo <- read_tsv("../results/ribosomal_human.txt")
+dds <- dds[!(rownames(dds) %in% ribo$`Approved Symbol`), ]
+
+load("../data/ref_transcriptome/t2g_complete.RData") ### NB change to current project when available
+
+pseudo <- t2g[grep("pseudogene", t2g$gene_biotype), ]
+dds <- dds[!(rownames(dds) %in% pseudo$symbol), ]
+
+# Removal of no-show genes
+dds <- dds[!near(rowSums(counts(dds)), 0), ]
+
+# Estimate size factors
+dds <- estimateSizeFactors(dds)
+
+# Normalise and impute the single cells
+sf <- log2(counts(dds, normalize = TRUE) + 1)
+sf[, stype_select$rna_seq == "single_cell"] <- DrImpute::DrImpute(sf[,
+                                                              stype_select$rna_seq ==
+                                                                "single_cell"])
+
+# Removal of invariant genes
+meanDM <- mean(sf)
+nSD <- apply(sf, 1, function(x) sd(x)/meanDM)
+if(sum(nSD < 1e-3) > 0){
+  sf <- sf[-which(nSD < 1e-3), ]
+  dds <- dds[-which(nSD < 1e-3), ]
+}
+```
+
+## Dimensionality reduction
+
+### Plot PCA
+
+```{r 9, fig.height=5, fig.width=8}
+#!eval: false
+# p-value for variable genes
+pval <- 0.05
+sf_means <- rowMeans(sf)
+sf_vars <- rowVars(sf)
+
+pca_wbe <- perform_pca(sf, sf_means, sf_vars, pval = pval, top_pc = 5)
+colnames(pca_wbe$ind$coord) <- paste0("PC", 1:5)
+
+# Pairs plot coloured by seq type
+pairs(pca_wbe$ind$coord, col = factor(stype_select$rna_seq), 
+      main = paste0("Before batch effect removal (n = ", 
+                    nrow(pca_wbe$var$coord), ", adjusted P = ", pval, ")"), 
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$rna_seq)), 
+       legend = unique(stype_select$rna_seq))
+
+png("../results/pairs_seqtype.png", height = 400, width = 600)
+pairs(pca_wbe$ind$coord, col = factor(stype_select$rna_seq), 
+      main = paste0("Before batch effect removal (n = ", 
+                    nrow(pca_wbe$var$coord), ", adjusted P = ", pval, ")"), 
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$rna_seq)), 
+       legend = unique(stype_select$rna_seq))
+dev.off()
+```
+
+![](images/pairs_seqtype.png)
+
+```{r 10, fig.height=5, fig.width=8}
+#!eval: false
+# Pairs plot coloured by cell line
+pairs(pca_wbe$ind$coord, col = factor(stype_select$state), 
+      main = paste0("Before batch effect removal (n = ", 
+                    nrow(pca_wbe$var$coord), ", adjusted P = ", pval, ")"), 
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$state)), 
+       legend = unique(stype_select$state))
+```
+
+```{r 10b, fig.height=5, fig.width=8}
+#!eval: false
+# Pairs plot coloured by medium
+pairs(pca_wbe$ind$coord, col = factor(stype_select$medium), 
+      main = paste0("Before batch effect removal (n = ", 
+                    nrow(pca_wbe$var$coord), ", adjusted P = ", pval, ")"), 
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$medium)), 
+       legend = unique(stype_select$medium))
+
+```
+
+### Control for sequencing type effect i.e. select vs sc
+
+```{r 11}
+#!eval: false
+sf_nbe <- limma::removeBatchEffect(sf, batch = stype_select$rna_seq)
+```
+
+### Replot PCA after batch effect removal
+
+```{r 12, fig.height=5, fig.width=8}
+#!eval: false
+sf_nbe_means <- rowMeans(sf_nbe)
+sf_nbe_vars <- rowVars(sf_nbe)
+
+pca_nbe <- perform_pca(sf_nbe, sf_nbe_means, sf_nbe_vars, pval = pval, top_pc = 5)
+colnames(pca_nbe$ind$coord) <- paste0("PC", 1:5)
+
+# Pairs plot coloured by RNA-seq type
+pairs(pca_nbe$ind$coord, col = factor(stype_select$rna_seq),
+      main = paste0("After batch effect removal (n = ",
+                    nrow(pca_nbe$var$coord), ", adjusted P = ", pval, ")"),
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$rna_seq)),
+       legend = unique(stype_select$rna_seq))
+
+png("../results/pairs_seqtype_nbe.png", height = 400, width = 600)
+pairs(pca_nbe$ind$coord, col = factor(stype_select$rna_seq),
+      main = paste0("After batch effect removal (n = ",
+                    nrow(pca_nbe$var$coord), ", adjusted P = ", pval, ")"),
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$rna_seq)),
+       legend = unique(stype_select$rna_seq))
+dev.off()
+```
+
+![](images/pairs_seqtype_nbe.png)
+
+```{r 13, fig.height=5, fig.width=8}
+#!eval: false
+# Pairs plot coloured by batch
+png("../results/pairs_state_nbe.png", height = 400, width = 600)
+pairs(pca_nbe$ind$coord, col = factor(stype_select$state),
+      main = paste0("After batch effect removal (n = ",
+                    nrow(pca_nbe$var$coord), ", adjusted P = ", pval, ")"),
+      pch = 16, oma = c(3, 3, 7, 15), cex = 0.7)
+legend("right", fill = unique(factor(stype_select$state)),
+       legend = unique(stype_select$state))
+dev.off()
+```
+
+![](images/pairs_state_nbe.png)
+
+```{r}
+#!eval: false
+save(pca_wbe, pca_nbe, col_pal, shape_pal, pval, stype_select, file = "../results/pca_sfn.RData")
+save(dds, sf, sf_nbe, stype_select, file = "../results/raw_norm_DESeq_sfn.RData")
+```
+
+PCA by state before batch effect removal
+
+```{r}
+#!eval: false
+p <- plot_pca(pca = pca_wbe, cond = stype_select$type, pc1 = 1, pc2 = 2, pval = pval, ptitle = "", col_pal = col_pal, shape_pal = shape_pal) + theme_classic(base_size = 36) + theme(legend.position = "none") + labs(title = NULL) + guides(col = guide_legend(ncol = 2))
+ggsave("../results/pca.pdf", last_plot(), height = 10, width = 10)
+ggsave("../results/pca.png", last_plot(), height = 10, width = 10)
+
+p <- plot_pca(pca = pca_wbe, cond = stype_select$type, pc1 = 1, pc2 = 2, pval = pval, ptitle = "", col_pal = col_pal, shape_pal = shape_pal) + theme_classic(base_size = 36) + guides(col = guide_legend(ncol = 2))
+ggsave("../results/pca_legend.pdf", last_plot(), height = 10, width = 10)
+ggsave("../results/pca_legend.png", last_plot(), height = 10, width = 10)
+```
+
+![](images/pca-01.png)
+
+PCA by state after batch effect removal
+
+```{r}
+#!eval: false
+p <- plot_pca(pca = pca_nbe, cond = stype_select$type, pc1 = 1, pc2 = 2, pval = pval, ptitle = "", col_pal = col_pal, shape_pal = shape_pal) + theme_bw(base_size = 16)# + guides(col = guide_legend(ncol = 2))
+ggsave("../results/pca_nbe.pdf", last_plot(), height = 8, width = 14)
+ggsave("../results/pca_nbe.png", last_plot(), height = 8, width = 14)
+```
+
+![](images/pca_nbe.png)
+
+### Controlling for effect of sequencing type (bulk vs sc) removes some important information about cell state (naive vs primed)
+
+So, proceed without correction
+
+## Non-linear dimensionality reduction
+
+```{r}
+#!eval: false
+# Select HVGs
+fit <- scran::fitTrendVar(sf_means, sf_vars)
+decomp <- scran::modelGeneVar(sf)
+idx <- which(decomp$FDR < pval)
+ntop <- length(idx)
+mat <- t(sf[idx,])
+```
+
+### T-sne
+
+```{r 16, fig.height=5, fig.width=8}
+#!eval: false
+# tSNE --------------------------------------------------------------------
+
+# Run 100 t-SNEs and keep the one with the lowest Kullback-Leibler divergence
+# (recommended by Laurens van der Maaten in https://lvdmaaten.github.io/tsne/)
+
+kl_div <- Inf
+for(i in 1:100){
+  ts <- Rtsne(mat, dims = 3, perplexity = 30)
+  if(min(ts$itercosts) < kl_div){
+    kl_div <- min(ts$itercosts)
+    tsf <- ts
+  }
+}
+
+res_ts <- tibble(x = tsf$Y[, 1], y = tsf$Y[, 2], z = tsf$Y[, 3],
+                 cond = stype_select$sample_type)
+
+p <- plot_tsne(tsf, stype_select$type, d1 = 1, d2 = 2, pval = pval, ntop, ptitle = "No batch correction", col_pal = col_pal, shape_pal = shape_pal) + theme_bw(base_size = 16)# + guides(col = guide_legend(ncol = 2))
+
+```
+
+```{r}
+#!eval: false
+ggsave("../results/tsne.pdf", #p + guides(col = guide_legend(ncol = 2)), 
+       height = 8, width = 14)
+ggsave("../results/tsne.png", #p + guides(col = guide_legend(ncol = 2)), 
+       height = 8, width = 14)
+
+save(tsf, res_ts, col_pal, shape_pal, pval, ntop, file = "../results/tsne_sfn.RData")
+var_genes <- colnames(mat)
+save(var_genes, file = "../results/var_genes.RData")
+```
+
+![](images/tsne.png)
+
+### UMAP
+
+```{r 17a, fig.height=5, fig.width=8}
+#!eval: false
+usf <- uwot::umap(mat, pca = 50, n_components = 10, n_neighbors = 10)
+
+q <- plot_umap(usf, stype_select$type, d1 = 1, d2 = 2, pval = pval, ntop, ptitle = "No batch correction", col_pal = col_pal, shape_pal = shape_pal) + theme_bw(base_size = 16)# + guides(col = guide_legend(ncol = 2))
+```
+
+```{r}
+#!eval: false
+ggsave("../results/umap.pdf", last_plot(), height = 8, width = 14)
+ggsave("../results/umap.png", last_plot(), height = 8, width = 14)
+save(usf, ntop, col_pal, shape_pal, pval, stype_select, file = "../results/umap_sfn.RData")
+```
+
+![](images/umap.png)
+
+```{r}
+#!eval: false
+plot_umap(usf, stype_select$state, d1 = 1, d2 = 2, pval = pval, ntop, ptitle = "No batch correction", col_pal = col_pal, shape_pal = shape_pal) + theme_bw(base_size = 16)# + guides(col = guide_legend(ncol = 2))
+```
+
+```{r 17b, fig.height=5, fig.width=8}
+#!eval: false
+usf <- uwot::umap(mat, n_components = 3, pca = 50)
+
+q <- plot_umap(usf, stype_select$state, d1 = 1, d2 = 2, ntop, pval, col_pal = col_pal, shape_pal = shape_pal, ptitle = "components = 3, pca = 50") + theme_bw(base_size = 16)
+
+q + theme(legend.position = "none")
+```
+
+```{r 17c, fig.height=5, fig.width=8}
+#!eval: false
+usf <- uwot::umap(mat, n_components = 10, pca = 100)
+
+q <- plot_umap(usf, stype_select$state, d1 = 1, d2 = 2, ntop, pval, col_pal = col_pal, shape_pal = shape_pal, ptitle = "components = 10, pca = 100") + theme_bw(base_size = 16)
+
+q + theme(legend.position = "none")
+```
+
+```{r 17d, fig.height=5, fig.width=8}
+#!eval: false
+usf <- uwot::umap(mat, n_components = 3, n_neighbors = 50, pca = 50)
+
+q <- plot_umap(usf, stype_select$sample_type, d1 = 1, d2 = 2, ntop, pval, col_pal = col_pal, shape_pal = shape_pal, ptitle = "components = 3, neighbours = 50, pca = 50") + theme_bw(base_size = 16)
+
+q + theme(legend.position = "none")
+```
+
+```{r 17e, fig.height=5, fig.width=8}
+#!eval: false
+usf <- uwot::umap(mat, n_components = 3, n_neighbors = 50)
+
+q <- plot_umap(usf, stype_select$sample_type, d1 = 1, d2 = 2, ntop, pval, col_pal = col_pal, shape_pal = shape_pal, ptitle = "components = 3, neighbours = 50") + theme_bw(base_size = 16)
+
+q + theme(legend.position = "none")
+```
+
+```{r 17f, fig.height=5, fig.width=8}
+#!eval: false
+usf <- uwot::umap(mat, n_components = 10, n_neighbors = 15)
+
+q <- plot_umap(usf, stype_select$sample_type, d1 = 1, d2 = 2, ntop, pval, col_pal = col_pal, shape_pal = shape_pal, ptitle = "components = 10, neighbours = 15") + theme_bw(base_size = 16)
+
+q + theme(legend.position = "none")
+```
