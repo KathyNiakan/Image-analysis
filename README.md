@@ -55,5 +55,5 @@ These scripts were compiled in R Studio version 2023.12.1+402, and R version 4.3
 
 ## /RNAseq
 
-Processed data and code for bulk and single-cell RNAseq analysis. See https://github.com/brickmanlab/simon-et-al-2024 for full code for processing and analysis of single cell RNAseq data, including integration with Reference datasets and ML model.
+Processed data and code for bulk and single cell RNAseq analysis. See https://github.com/brickmanlab/simon-et-al-2024 for full code for processing and analysis of single cell RNAseq data, including integration with reference datasets and ML model.
 
