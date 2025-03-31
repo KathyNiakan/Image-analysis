@@ -1,0 +1,7 @@
+﻿sample_name,cell_line,medium,rna_seq,technology,batch,ENA_study_ID
+ULIX3-rep2,naive_hESC,UXGL_ULIX,bulk,paired_end,Simon,This study
+ULIX2-rep2,naive_hESC,UXGL_ULIX,bulk,paired_end,Simon,This study
+ULIX3-rep1,naive_hESC,UXGL_ULIX,bulk,paired_end,Simon,This study
+ULIX2-rep1,naive_hESC,UXGL_ULIX,bulk,paired_end,Simon,This study
+DMSO2-rep2,naive_hESC,UXGL_DMSO,bulk,paired_end,Simon,This study
+DMSO2-rep1,naive_hESC,UXGL_DMSO,bulk,paired_end,Simon,This study
