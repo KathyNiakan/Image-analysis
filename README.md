@@ -32,7 +32,7 @@ Pre-processed and processed data for image analysis in R
 
 -   \*.csv - all processed data containing experiment metadata, raw and Z-corrected fluorescence intensitities for each of the FGF, ERKi and pERK experiments.
 
-For raw imaging data, please see Figshare repository DOI dx.doi.org/XXXX
+For raw imaging data, please see Figshare repository DOI dx.doi.org/10.6084/m9.figshare.28597145
 
 ## /R
 
