@@ -1,6 +1,6 @@
 # Simon et al 2025
 
-This repository contains the data and code associated with image analysis in the manuscript Simon et. al., (2025) XXXX Suppression of ERK signalling promotes pluripotent epiblast in the human blastocyst. DOI XXXX
+This repository contains the data and code associated with image analysis in the manuscript Simon et. al., (2025) Suppression of ERK signalling promotes pluripotent epiblast in the human blastocyst. 
 
 # Repository structure and useage
 
